@@ -41,6 +41,10 @@ console.log(`\n==> Incrementing version: v${currentVersion} -> v${nextVersion}`)
 pkg.version = nextVersion
 tauriConf.version = nextVersion
 
+// Ensure createUpdaterArtifacts is configured
+if (!tauriConf.bundle) tauriConf.bundle = {}
+tauriConf.bundle.createUpdaterArtifacts = 'v1Compatible'
+
 fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
 fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2) + '\n', 'utf8')
 
@@ -84,6 +88,8 @@ fs.mkdirSync(distFolder, { recursive: true })
 
 const bundleDir = path.join(rootDir, 'src-tauri', 'target', 'release', 'bundle')
 
+let collectedFiles = []
+
 function copyAssets(dir) {
   if (!fs.existsSync(dir)) return
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -100,28 +106,57 @@ function copyAssets(dir) {
         lower.endsWith('.sig') ||
         lower.endsWith('.tar.gz')
       ) {
-        fs.copyFileSync(fullPath, path.join(distFolder, entry.name))
+        const destPath = path.join(distFolder, entry.name)
+        fs.copyFileSync(fullPath, destPath)
+        collectedFiles.push(entry.name)
         console.log(`  + Packaged: ${entry.name}`)
       }
     }
   }
 }
 
-console.log(`\n==> Collecting release assets into: ${distFolder}`)
+console.log(`\n==> Collecting all release assets into: ${distFolder}`)
 copyAssets(bundleDir)
+
+// 6. Guarantee latest.json exists for the in-app updater
+const latestJsonPath = path.join(distFolder, 'latest.json')
+if (!fs.existsSync(latestJsonPath)) {
+  const sigFile = collectedFiles.find((f) => f.endsWith('.sig') && !f.endsWith('.msi.sig')) || collectedFiles.find((f) => f.endsWith('.sig'))
+  const zipFile = collectedFiles.find((f) => f.endsWith('.zip') && !f.endsWith('.msi.zip')) || collectedFiles.find((f) => f.endsWith('.zip'))
+
+  if (sigFile && zipFile) {
+    const signature = fs.readFileSync(path.join(distFolder, sigFile), 'utf8').trim()
+    const latestPayload = {
+      version: `v${nextVersion}`,
+      notes: `AgentJob Release v${nextVersion}`,
+      pub_date: new Date().toISOString(),
+      platforms: {
+        'windows-x86_64': {
+          signature,
+          url: `https://github.com/byronjreyes/Agent-Job/releases/download/v${nextVersion}/${zipFile}`,
+        },
+      },
+    }
+    fs.writeFileSync(latestJsonPath, JSON.stringify(latestPayload, null, 2) + '\n', 'utf8')
+    console.log(`  + Generated manifest: latest.json`)
+  }
+}
 
 console.log('\n==================================================')
 console.log(`  RELEASE v${nextVersion} READY FOR GITHUB!  `)
 console.log('==================================================')
 console.log(`Folder: ${distFolder}\n`)
 
-// 6. Open release folder & GitHub release page
+// 7. Open release folder & GitHub release page in default browser
 if (process.platform === 'win32') {
   try {
-    execSync(`explorer.exe "${distFolder}"`)
     const releaseUrl = `https://github.com/byronjreyes/Agent-Job/releases/new?tag=v${nextVersion}&title=AgentJob%20v${nextVersion}`
-    execSync(`start "" "${releaseUrl}"`)
-  } catch {}
+    execSync(`powershell -NoProfile -Command "Start-Process '${distFolder}'"`, { stdio: 'ignore' })
+    execSync(`powershell -NoProfile -Command "Start-Process '${releaseUrl}'"`, { stdio: 'ignore' })
+  } catch (err) {
+    console.log('Could not launch Explorer or Browser automatically:', err.message)
+  }
 }
 
-console.log('-> Browser & Folder opened! Drag and drop all files into GitHub and click "Publish release"!\n')
+console.log('-> Browser & Release folder are open!')
+console.log('-> Select all files in the opened folder, drag & drop into GitHub, and click "Publish release"!\n')
