@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Activity, AlertCircle, AlertTriangle, Archive, Bot, BriefcaseBusiness, Check, CircleUserRound, ClipboardList, Copy, DownloadCloud, FileDown,
-  ExternalLink, FileText, GitBranch, Image as ImageIcon, Inbox, Info, KeyRound, Layers3, LoaderCircle, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Pencil,
+  ExternalLink, FileText, Image as ImageIcon, Inbox, Info, Layers3, LoaderCircle, Monitor, Moon, PanelLeftClose, PanelLeftOpen, Pencil,
   Plus, RefreshCw, RotateCcw, Search, Send, Settings2, ShieldCheck, Smartphone, Sparkles, Sun, Trash2, UploadCloud, X, Zap,
   type LucideIcon,
 } from 'lucide-react'
@@ -1139,46 +1139,6 @@ function SettingsView() {
                 </button>
               </div>
             )}
-          </section>
-
-          <section className="card space-y-4">
-            <SectionTitle
-              title="GitHub Actions & Signing Secrets"
-              description="How updates and secure binary signatures are managed on GitHub."
-            />
-            <div className="space-y-3 text-xs leading-relaxed text-muted">
-              <p>
-                To enable automatic building and cryptographic signing on GitHub Releases without manual intervention, add these secrets to your repository:
-              </p>
-              <div className="grid gap-2.5 md:grid-cols-2">
-                <div className="rounded-lg border border-line bg-inset p-3 space-y-1">
-                  <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-text">
-                    <KeyRound size={13} className="text-amber-400" />
-                    <span>TAURI_SIGNING_PRIVATE_KEY</span>
-                  </div>
-                  <p className="text-[10px] text-muted">The private mini-sign key contents generated for your project.</p>
-                </div>
-                <div className="rounded-lg border border-line bg-inset p-3 space-y-1">
-                  <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-text">
-                    <KeyRound size={13} className="text-amber-400" />
-                    <span>TAURI_SIGNING_PRIVATE_KEY_PASSWORD</span>
-                  </div>
-                  <p className="text-[10px] text-muted">Optional password if your private key is encrypted (leave empty if none).</p>
-                </div>
-              </div>
-              <div className="rounded-lg border border-line bg-inset p-3 space-y-1.5">
-                <div className="flex items-center gap-2 font-bold text-text">
-                  <GitBranch size={14} className="text-emerald-400" />
-                  <span>Out of GitHub Actions billing / Building locally?</span>
-                </div>
-                <p className="text-[11px] text-muted">
-                  You can compile and sign updates on your local machine anytime by running:
-                </p>
-                <code className="block rounded bg-surface p-2 font-mono text-[11px] text-emerald-400 border border-line">
-                  powershell -ExecutionPolicy Bypass -File ./scripts/build-signed-release.ps1
-                </code>
-              </div>
-            </div>
           </section>
         </div>
       )}
