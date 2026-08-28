@@ -34,8 +34,8 @@ const nav: Array<{ id: ViewId; label: string; icon: LucideIcon }> = [
 type ChatMessage =
   | { id: string; type: 'user'; text: string }
   | { id: string; type: 'assistant'; text: string }
-  | { id: string; type: 'review'; description: string; review: JobReview; resumeId?: string; fromMemory?: boolean }
-  | { id: string; type: 'draft'; description: string; review: JobReview; letter: string; subject: string; recipient: string; resumeId?: string; editing?: 'letter' | 'subject'; sent?: boolean; fromMemory?: boolean }
+  | { id: string; type: 'review'; description: string; review: JobReview; resumeId?: string; resumeIds?: string[]; fromMemory?: boolean }
+  | { id: string; type: 'draft'; description: string; review: JobReview; letter: string; subject: string; recipient: string; recipients?: string[]; resumeId?: string; resumeIds?: string[]; editing?: 'letter' | 'subject'; sent?: boolean; fromMemory?: boolean }
   | { id: string; type: 'notice'; text: string; tone?: 'success' | 'error' }
 
 function App() {
@@ -388,24 +388,57 @@ function WorkspaceView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
     setBusy('review')
     try {
       const result = await reviewJob(text, activeEndpoint)
-      setMessages((items) => [...items, { id: crypto.randomUUID(), type: 'review', description: text, review: result }])
+      const defaultActiveId = store.resumes.find((r) => r.active)?.id
+      const defaultResumeIds = defaultActiveId ? [defaultActiveId] : []
+      setMessages((items) => [
+        ...items,
+        {
+          id: crypto.randomUUID(),
+          type: 'review',
+          description: text,
+          review: result,
+          resumeId: defaultActiveId,
+          resumeIds: defaultResumeIds,
+        },
+      ])
     } catch (error) {
       setMessages((items) => [...items, { id: crypto.randomUUID(), type: 'notice', tone: 'error', text: errorMessage(error) }])
     } finally { setBusy(null) }
   }
 
-  async function chooseResume(message: Extract<ChatMessage, { type: 'review' }>, resumeId?: string) {
+  async function generateFromReview(message: Extract<ChatMessage, { type: 'review' }>) {
     if (!store.profile.fullName) {
       setMessages((items) => [...items, { id: crypto.randomUUID(), type: 'notice', tone: 'error', text: 'Complete your profile before generating a cover letter.' }])
       return
     }
-    if (resumeId) store.setActiveResume(resumeId)
-    updateMessage(message.id, { resumeId })
+    const selectedResumeIds = message.resumeIds ?? (message.resumeId ? [message.resumeId] : [store.resumes.find((r) => r.active)?.id].filter(Boolean) as string[])
     setBusy('generate')
     try {
-      const letter = await generateLetter({ description: message.description, review: message.review, profile: store.profile, template: selectedTemplate.body, adaptive: selectedTemplate.adaptive, endpoint: activeEndpoint })
+      const letter = await generateLetter({
+        description: message.description,
+        review: message.review,
+        profile: store.profile,
+        template: selectedTemplate.body,
+        adaptive: selectedTemplate.adaptive,
+        endpoint: activeEndpoint,
+      })
       const subject = message.review.position ? `Application for ${message.review.position}${message.review.company ? ` — ${message.review.company}` : ''}` : 'Job application'
-      setMessages((items) => [...items, { id: crypto.randomUUID(), type: 'draft', description: message.description, review: message.review, letter, subject, recipient: message.review.emails.join(', '), resumeId }])
+      const recipientEmails = message.review.emails
+      setMessages((items) => [
+        ...items,
+        {
+          id: crypto.randomUUID(),
+          type: 'draft',
+          description: message.description,
+          review: message.review,
+          letter,
+          subject,
+          recipient: recipientEmails.join(', '),
+          recipients: recipientEmails,
+          resumeId: selectedResumeIds[0],
+          resumeIds: selectedResumeIds,
+        },
+      ])
     } catch (error) {
       setMessages((items) => [...items, { id: crypto.randomUUID(), type: 'notice', tone: 'error', text: errorMessage(error) }])
     } finally { setBusy(null) }
@@ -433,21 +466,60 @@ function WorkspaceView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
     }
     setBusy('send')
     try {
-      const resume = store.resumes.find((item) => item.id === message.resumeId)
-      const resumeName = resume ? (resume.fileName || (resume.label.toLowerCase().endsWith('.pdf') ? resume.label : `${resume.label}.pdf`)) : null
+      const resumeIds = message.resumeIds && message.resumeIds.length > 0
+        ? message.resumeIds
+        : (message.resumeId ? [message.resumeId] : [])
+
+      const attachments = resumeIds
+        .map((id) => {
+          const r = store.resumes.find((item) => item.id === id)
+          if (!r) return null
+          return {
+            path: r.path,
+            name: r.fileName || (r.label.toLowerCase().endsWith('.pdf') ? r.label : `${r.label}.pdf`),
+          }
+        })
+        .filter((item): item is { path: string; name: string } => item !== null)
+
       await sendEmail({
         recipient: message.recipient,
         subject: message.subject,
         plainBody: message.letter,
         profile: store.profile,
         signature: store.signature,
-        resumePath: resume?.path ?? null,
-        resumeName,
+        resumePath: attachments[0]?.path ?? null,
+        resumeName: attachments[0]?.name ?? null,
+        attachments,
       })
+
       const now = new Date().toISOString()
-      store.addApplication({ id: crypto.randomUUID(), company: message.review.company, position: message.review.position, location: message.review.location, email: message.recipient, subject: message.subject, status: 'Sent', resumeId: message.resumeId, createdAt: now, updatedAt: now, notes: '' })
+      const recipientList = message.recipient
+        .split(/[,;]/)
+        .map((e) => e.trim())
+        .filter(Boolean)
+
+      store.addApplication({
+        id: crypto.randomUUID(),
+        company: message.review.company,
+        position: message.review.position,
+        location: message.review.location,
+        email: message.recipient,
+        emails: recipientList,
+        subject: message.subject,
+        status: 'Sent',
+        resumeId: resumeIds[0],
+        resumeIds,
+        createdAt: now,
+        updatedAt: now,
+        notes: '',
+      })
       updateMessage(message.id, { sent: true, editing: undefined })
-      setMessages((items) => [...items, { id: crypto.randomUUID(), type: 'notice', tone: 'success', text: `Email sent successfully to ${message.recipient}. The application was added to your tracker.` }])
+      const countNotice = recipientList.length > 1 ? `all ${recipientList.length} recipient emails (${recipientList.join(', ')})` : message.recipient
+      const attachNotice = attachments.length > 0 ? ` with ${attachments.length} attached resume${attachments.length === 1 ? '' : 's'}` : ''
+      setMessages((items) => [
+        ...items,
+        { id: crypto.randomUUID(), type: 'notice', tone: 'success', text: `Email sent successfully to ${countNotice}${attachNotice}. The application was added to your tracker.` },
+      ])
     } catch (error) {
       setMessages((items) => [...items, { id: crypto.randomUUID(), type: 'notice', tone: 'error', text: errorMessage(error) }])
     } finally { setBusy(null) }
@@ -464,24 +536,266 @@ function WorkspaceView({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
           </button>
         </div>
       )}
-      {!messages.length && <div className="chat-empty"><div className="chat-mark"><Bot size={24} /></div><h2>Send me a job description</h2><p>Paste text or screenshot (Ctrl+V / Drop image) — I’ll extract the facts with native OCR, match your profile, and craft your application.</p><div className="chat-empty-actions"><button onClick={() => setComposer('Company: Example Company\nPosition: IT Support Specialist\nLocation: Remote\n\nRequirements:\n- Troubleshooting\n- Customer support\n\nApply at: careers@example.com')}>Try an example</button><button onClick={() => fileInputRef.current?.click()}><ImageIcon size={13} /> Upload screenshot</button>{!activeEndpoint && <button onClick={() => onNavigate('endpoints')}>Configure AI endpoint</button>}</div></div>}
+      {!messages.length && <div className="chat-empty"><div className="chat-mark"><Bot size={24} /></div><h2>Send me a job description</h2><p>Paste text or screenshot (Ctrl+V / Drop image) — I’ll extract the facts with native OCR, match your profile, and craft your application.</p><div className="chat-empty-actions"><button onClick={() => setComposer('Company: Example Company\nPosition: IT Support Specialist\nLocation: Remote\n\nRequirements:\n- Troubleshooting\n- Customer support\n\nApply at: careers@example.com, hr@example.com')}>Try an example</button><button onClick={() => fileInputRef.current?.click()}><ImageIcon size={13} /> Upload screenshot</button>{!activeEndpoint && <button onClick={() => onNavigate('endpoints')}>Configure AI endpoint</button>}</div></div>}
       {messages.map((message) => <div className={`chat-row ${message.type === 'user' ? 'user' : 'assistant'}`} key={message.id}>
         {message.type !== 'user' && <div className="chat-avatar"><Bot size={15} /></div>}
         <div className={`chat-bubble ${message.type === 'user' ? 'user-bubble' : ''} ${message.type === 'notice' && message.tone ? message.tone : ''}`}>
           {message.type === 'user' && <div className="whitespace-pre-wrap">{message.text}</div>}
           {message.type === 'assistant' && <div className="whitespace-pre-wrap leading-relaxed">{message.text}</div>}
           {message.type === 'notice' && <div className="flex gap-2"><Check size={15} className={message.tone === 'error' ? 'text-rose-400' : 'text-emerald-400'} /><span>{message.text}</span></div>}
-          {message.type === 'review' && <><div className="flex items-center justify-between gap-3"><div><div className="chat-message-title">I reviewed the job posting</div><p className="chat-message-copy">Please verify these details before I create your cover letter.</p></div>{message.fromMemory && <span className="tag bg-emerald-500/10 text-emerald-400 border-emerald-500/20"><Zap size={11} /> Memory (0 tokens)</span>}</div><div className="chat-facts"><EditableFact label="Company" value={message.review.company} onChange={(company) => updateMessage(message.id, { review: { ...message.review, company } })} /><EditableFact label="Position" value={message.review.position} onChange={(position) => updateMessage(message.id, { review: { ...message.review, position } })} /><EditableFact label="Location" value={message.review.location} onChange={(location) => updateMessage(message.id, { review: { ...message.review, location } })} /><EditableFact label="HR email" value={message.review.emails.join(', ')} onChange={(emails) => updateMessage(message.id, { review: { ...message.review, emails: emails.split(',').map((item) => item.trim()).filter(Boolean) } })} /></div>{message.review.mustHaveSkills.length > 0 && <div className="mt-3 flex flex-wrap gap-1.5">{message.review.mustHaveSkills.map((skill) => <span key={skill} className="tag">{skill}</span>)}</div>}<div className="chat-question">Which resume do you want to attach?</div><div className="chat-choice-grid">{store.resumes.map((resume) => <button key={resume.id} disabled={busy !== null} onClick={() => void chooseResume(message, resume.id)}><FileText size={14} /><span>{resume.label}</span>{message.resumeId === resume.id && <Check size={13} />}</button>)}<button disabled={busy !== null} onClick={() => void chooseResume(message)}><X size={14} /><span>No attachment</span></button>{!store.resumes.length && <button onClick={() => onNavigate('resumes')}><Plus size={14} /><span>Add a resume</span></button>}</div></>}
-          {message.type === 'draft' && <><div className="flex items-center justify-between gap-3"><div><div className="flex items-center gap-2"><div className="chat-message-title">Your application is ready</div>{message.fromMemory && <span className="tag bg-emerald-500/10 text-emerald-400 border-emerald-500/20"><Zap size={11} /> Agent memory (0 tokens)</span>}</div><p className="chat-message-copy">{message.fromMemory ? 'Reused your previous application draft for this role instantly.' : 'Review everything below, then copy, edit, or send it.'}</p></div>{message.sent && <span className="sent-badge"><Check size={11} /> Sent</span>}</div><label className="chat-mail-field"><span>To</span><input value={message.recipient} onChange={(event) => updateMessage(message.id, { recipient: event.target.value })} placeholder="hr@company.com" /></label><div className="chat-mail-field"><span>Subject</span>{message.editing === 'subject' ? <input autoFocus value={message.subject} onChange={(event) => updateMessage(message.id, { subject: event.target.value })} /> : <div>{message.subject}</div>}<button type="button" className="chat-inline-edit" aria-label={message.editing === 'subject' ? 'Finish editing subject' : 'Edit subject'} onClick={() => updateMessage(message.id, { editing: message.editing === 'subject' ? undefined : 'subject' })}><Pencil size={12} />{message.editing === 'subject' ? 'Done' : 'Edit'}</button></div><div className="chat-letter-wrap"><div className="chat-letter-head"><span>Cover letter</span><button type="button" className="chat-inline-edit" aria-label={message.editing === 'letter' ? 'Finish editing cover letter' : 'Edit cover letter'} onClick={() => updateMessage(message.id, { editing: message.editing === 'letter' ? undefined : 'letter' })}><Pencil size={12} />{message.editing === 'letter' ? 'Done' : 'Edit'}</button></div><div className="chat-letter">{message.editing === 'letter' ? <textarea autoFocus value={message.letter} onChange={(event) => updateMessage(message.id, { letter: event.target.value })} /> : <div className="whitespace-pre-wrap">{message.letter}</div>}</div></div><div className="chat-draft-meta"><span><Layers3 size={12} /> {selectedTemplate.name}</span><span><FileText size={12} /> {store.resumes.find((resume) => resume.id === message.resumeId)?.label ?? 'No attachment'}</span></div><div className="chat-actions">
-            <button type="button" onClick={() => { void navigator.clipboard.writeText(message.letter); toast.success('Cover letter copied to clipboard!') }}>
-              <Copy size={14} /> Copy letter
-            </button>
-            {message.fromMemory && <button type="button" disabled={busy !== null} onClick={() => void regenerateDraft(message)} title="Re-write draft with active AI endpoint"><RefreshCw size={13} className={busy === 'generate' ? 'animate-spin' : ''} /> Regenerate with AI</button>}
-            <button type="button" className="send" disabled={busy !== null || message.sent} onClick={() => void sendDraft(message)}>
-              {busy === 'send' ? <LoaderCircle className="animate-spin" size={14} /> : <Send size={14} />} Send to HR
-            </button>
-          </div>
-        </>}
+          {message.type === 'review' && (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="chat-message-title">I reviewed the job posting</div>
+                  <p className="chat-message-copy">Please verify details and choose which resume(s) to attach.</p>
+                </div>
+                {message.fromMemory && (
+                  <span className="tag bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                    <Zap size={11} /> Memory (0 tokens)
+                  </span>
+                )}
+              </div>
+
+              <div className="chat-facts">
+                <EditableFact
+                  label="Company"
+                  value={message.review.company}
+                  onChange={(company) => updateMessage(message.id, { review: { ...message.review, company } })}
+                />
+                <EditableFact
+                  label="Position"
+                  value={message.review.position}
+                  onChange={(position) => updateMessage(message.id, { review: { ...message.review, position } })}
+                />
+                <EditableFact
+                  label="Location"
+                  value={message.review.location}
+                  onChange={(location) => updateMessage(message.id, { review: { ...message.review, location } })}
+                />
+                <EmailFactTags
+                  emails={message.review.emails}
+                  onChange={(emails) => updateMessage(message.id, { review: { ...message.review, emails } })}
+                />
+              </div>
+
+              {message.review.mustHaveSkills.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {message.review.mustHaveSkills.map((skill) => (
+                    <span key={skill} className="tag">{skill}</span>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-4 rounded-xl border border-line bg-inset p-3.5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-text">Resume attachments (Choose 1 or more)</span>
+                  {store.resumes.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-[11px] text-muted hover:text-emerald-400 cursor-pointer"
+                      onClick={() => {
+                        const current = message.resumeIds ?? (message.resumeId ? [message.resumeId] : [])
+                        const allIds = store.resumes.map((r) => r.id)
+                        const next = current.length === allIds.length ? [] : allIds
+                        updateMessage(message.id, { resumeIds: next, resumeId: next[0] })
+                      }}
+                    >
+                      {(message.resumeIds || []).length === store.resumes.length ? 'Deselect all' : 'Select all'}
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {store.resumes.map((resume) => {
+                    const selected = (message.resumeIds ?? (message.resumeId ? [message.resumeId] : [store.resumes.find((r) => r.active)?.id].filter(Boolean) as string[])).includes(resume.id)
+                    return (
+                      <button
+                        type="button"
+                        key={resume.id}
+                        disabled={busy !== null}
+                        onClick={() => {
+                          const current = message.resumeIds ?? (message.resumeId ? [message.resumeId] : [store.resumes.find((r) => r.active)?.id].filter(Boolean) as string[])
+                          const next = selected ? current.filter((id) => id !== resume.id) : [...current, resume.id]
+                          updateMessage(message.id, { resumeIds: next, resumeId: next[0] })
+                        }}
+                        className={`flex items-center justify-between gap-2 rounded-lg border p-2.5 text-left transition-all cursor-pointer ${
+                          selected
+                            ? 'border-emerald-500/40 bg-emerald-500/10 text-text'
+                            : 'border-line bg-surface text-muted hover:border-line hover:text-text'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText size={15} className={selected ? 'text-emerald-400' : 'text-muted'} />
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-bold">{resume.label}</div>
+                            <div className="truncate text-[10px] text-muted">{resume.fileName}</div>
+                          </div>
+                        </div>
+                        <div className={`grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors ${
+                          selected ? 'border-emerald-500 bg-emerald-500 text-black' : 'border-line bg-inset'
+                        }`}>
+                          {selected && <Check size={11} strokeWidth={3} />}
+                        </div>
+                      </button>
+                    )
+                  })}
+                  {!store.resumes.length && (
+                    <button
+                      type="button"
+                      className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-line p-3 text-xs text-muted hover:border-emerald-500/40 hover:text-text cursor-pointer"
+                      onClick={() => onNavigate('resumes')}
+                    >
+                      <Plus size={14} /> Add your first resume to library
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+                  <div className="text-[11px] text-muted">
+                    {(() => {
+                      const selectedCount = (message.resumeIds ?? (message.resumeId ? [message.resumeId] : [store.resumes.find((r) => r.active)?.id].filter(Boolean) as string[])).length
+                      if (selectedCount === 0) return 'No attachments selected'
+                      if (selectedCount === 1) return '1 resume attached'
+                      return `${selectedCount} resumes attached`
+                    })()}
+                  </div>
+                  <button
+                    type="button"
+                    className="primary-button h-9 px-5 text-xs font-bold cursor-pointer shadow-md"
+                    disabled={busy !== null}
+                    onClick={() => void generateFromReview(message)}
+                  >
+                    {busy === 'generate' ? <LoaderCircle className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                    {busy === 'generate' ? 'Writing cover letter…' : 'Generate Cover Letter'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+
+          {message.type === 'draft' && (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <div className="chat-message-title">Your application is ready</div>
+                    {message.fromMemory && (
+                      <span className="tag bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                        <Zap size={11} /> Agent memory (0 tokens)
+                      </span>
+                    )}
+                  </div>
+                  <p className="chat-message-copy">
+                    {message.fromMemory
+                      ? 'Reused your previous application draft for this role instantly.'
+                      : 'Review everything below, then copy, edit, or send it.'}
+                  </p>
+                </div>
+                {message.sent && <span className="sent-badge"><Check size={11} /> Sent</span>}
+              </div>
+
+              <label className="chat-mail-field">
+                <span>To</span>
+                <input
+                  value={message.recipient}
+                  onChange={(event) => updateMessage(message.id, { recipient: event.target.value })}
+                  placeholder="hr@company.com"
+                />
+              </label>
+
+              <div className="chat-mail-field">
+                <span>Subject</span>
+                {message.editing === 'subject' ? (
+                  <input
+                    autoFocus
+                    value={message.subject}
+                    onChange={(event) => updateMessage(message.id, { subject: event.target.value })}
+                  />
+                ) : (
+                  <div>{message.subject}</div>
+                )}
+                <button
+                  type="button"
+                  className="chat-inline-edit"
+                  aria-label={message.editing === 'subject' ? 'Finish editing subject' : 'Edit subject'}
+                  onClick={() => updateMessage(message.id, { editing: message.editing === 'subject' ? undefined : 'subject' })}
+                >
+                  <Pencil size={12} />
+                  {message.editing === 'subject' ? 'Done' : 'Edit'}
+                </button>
+              </div>
+
+              <div className="chat-letter-wrap">
+                <div className="chat-letter-head">
+                  <span>Cover letter</span>
+                  <button
+                    type="button"
+                    className="chat-inline-edit"
+                    aria-label={message.editing === 'letter' ? 'Finish editing cover letter' : 'Edit cover letter'}
+                    onClick={() => updateMessage(message.id, { editing: message.editing === 'letter' ? undefined : 'letter' })}
+                  >
+                    <Pencil size={12} />
+                    {message.editing === 'letter' ? 'Done' : 'Edit'}
+                  </button>
+                </div>
+                <div className="chat-letter">
+                  {message.editing === 'letter' ? (
+                    <textarea
+                      autoFocus
+                      value={message.letter}
+                      onChange={(event) => updateMessage(message.id, { letter: event.target.value })}
+                    />
+                  ) : (
+                    <div className="whitespace-pre-wrap">{message.letter}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="chat-draft-meta">
+                <span><Layers3 size={12} /> {selectedTemplate.name}</span>
+                <span>
+                  <FileText size={12} />{' '}
+                  {(() => {
+                    const ids = message.resumeIds && message.resumeIds.length > 0 ? message.resumeIds : (message.resumeId ? [message.resumeId] : [])
+                    const labels = ids.map((id) => store.resumes.find((r) => r.id === id)?.label).filter(Boolean)
+                    if (labels.length === 0) return 'No attachments'
+                    return `Attached: ${labels.join(', ')}`
+                  })()}
+                </span>
+              </div>
+
+              <div className="chat-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(message.letter)
+                    toast.success('Cover letter copied to clipboard!')
+                  }}
+                >
+                  <Copy size={14} /> Copy letter
+                </button>
+                {message.fromMemory && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void regenerateDraft(message)}
+                    title="Re-write draft with active AI endpoint"
+                  >
+                    <RefreshCw size={13} className={busy === 'generate' ? 'animate-spin' : ''} /> Regenerate with AI
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="send"
+                  disabled={busy !== null || message.sent}
+                  onClick={() => void sendDraft(message)}
+                >
+                  {busy === 'send' ? <LoaderCircle className="animate-spin" size={14} /> : <Send size={14} />} Send to HR
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>)}
       {busy && <div className="chat-row assistant"><div className="chat-avatar"><Bot size={15} /></div><div className="typing-bubble"><span /><span /><span /><div>{busy === 'review' ? 'Reviewing the job posting…' : busy === 'generate' ? 'Writing your tailored cover letter…' : 'Sending your application…'}</div></div></div>}
@@ -1303,6 +1617,60 @@ function TagInput({ value, onChange, placeholder, autoFocus, multiline }: { valu
   return <div className={`tag-input ${multiline ? 'min-h-28 items-start content-start' : ''}`} onClick={(event) => (event.currentTarget.querySelector('input') as HTMLInputElement | null)?.focus()}>{value.map((tag, index) => <span className="tag-chip" key={`${tag}-${index}`}>{tag}<button type="button" aria-label={`Remove ${tag}`} onClick={(event) => { event.stopPropagation(); remove(index) }}><X size={11} /></button></span>)}<input autoFocus={autoFocus} value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={commit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit() } else if (event.key === 'Backspace' && !draft && value.length) remove(value.length - 1) }} placeholder={value.length ? 'Add another…' : placeholder} /></div>
 }
 function EditableFact({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="rounded-lg border border-line bg-inset px-2.5 py-2"><span className="eyebrow">{label}</span><input className="mt-1 w-full bg-transparent text-xs font-semibold outline-none" value={value} onChange={(e) => onChange(e.target.value)} placeholder="Not found — add manually" /></label> }
+function EmailFactTags({ emails, onChange }: { emails: string[]; onChange: (emails: string[]) => void }) {
+  const [draft, setDraft] = useState('')
+  function commit() {
+    const trimmed = draft.trim().toLowerCase()
+    if (trimmed && !emails.includes(trimmed)) {
+      onChange([...emails, trimmed])
+    }
+    setDraft('')
+  }
+  function remove(target: string) {
+    onChange(emails.filter((e) => e !== target))
+  }
+  return (
+    <div className="rounded-lg border border-line bg-inset px-2.5 py-2 sm:col-span-2">
+      <div className="flex items-center justify-between">
+        <span className="eyebrow">HR Recipient Emails</span>
+        <span className="text-[10px] text-muted font-mono">
+          {emails.length === 0 ? 'No emails found' : emails.length === 1 ? '1 email' : `${emails.length} emails`}
+        </span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+        {emails.map((email) => (
+          <span
+            key={email}
+            className="tag bg-surface border-line text-emerald-400 font-mono text-[11px] flex items-center gap-1.5 py-0.5 px-2"
+          >
+            <span>{email}</span>
+            <button
+              type="button"
+              className="text-muted hover:text-rose-400 cursor-pointer"
+              onClick={() => remove(email)}
+              title={`Remove ${email}`}
+            >
+              <X size={11} />
+            </button>
+          </span>
+        ))}
+        <input
+          className="h-6 rounded bg-surface border border-line px-2 text-xs font-mono text-text placeholder:text-muted/60 focus:border-emerald-500/50 focus:outline-none"
+          placeholder={emails.length === 0 ? 'Add email (e.g. hr@company.com)' : '+ Add email'}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              commit()
+            }
+          }}
+        />
+      </div>
+    </div>
+  )
+}
 function Inset({ label, value, mono }: { label: string; value: string; mono?: boolean }) { return <div className="min-w-0 rounded-lg border border-line bg-inset px-2.5 py-2"><div className="eyebrow">{label}</div><div className={`mt-1 truncate text-[11px] font-semibold ${mono ? 'font-mono' : ''}`}>{value}</div></div> }
 function StatusDot({ online, warning }: { online?: boolean; warning?: boolean }) { const color = online ? 'bg-emerald-500' : warning ? 'bg-amber-500' : 'bg-rose-500'; return <span className="relative flex h-2.5 w-2.5 shrink-0"><span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${color} opacity-40`} /><span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${color}`} /></span> }
 function Switch({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) { return <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={`switch ${checked ? 'active' : ''}`}><span /></button> }

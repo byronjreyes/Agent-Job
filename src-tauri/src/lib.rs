@@ -175,6 +175,13 @@ pub struct JobReview {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ResumeAttachment {
+    pub path: String,
+    pub name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SendPayload {
     pub recipient: String,
     pub subject: String,
@@ -183,6 +190,8 @@ pub struct SendPayload {
     pub signature: SignatureConfig,
     pub resume_path: Option<String>,
     pub resume_name: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<ResumeAttachment>,
 }
 
 fn app_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -383,10 +392,12 @@ fn clean_text_field(raw: &str) -> String {
 
 fn local_review(description: &str) -> JobReview {
     let email_regex = Regex::new(r"(?i)[\w.+-]+@[\w.-]+\.[a-z]{2,}").expect("valid email regex");
-    let emails: Vec<String> = email_regex
+    let mut emails: Vec<String> = email_regex
         .find_iter(description)
-        .map(|value| value.as_str().to_string())
+        .map(|value| value.as_str().trim().to_lowercase())
         .collect();
+    emails.sort();
+    emails.dedup();
 
     let lines: Vec<&str> = description
         .lines()
@@ -503,7 +514,7 @@ async fn review_job(
         return Ok(local);
     };
 
-    let prompt = format!("You are an accurate structured job parser. Extract facts from the job text below.\nReturn strict JSON matching this schema:\n{{\n  \"company\": \"string\",\n  \"position\": \"string (job title/role)\",\n  \"location\": \"string\",\n  \"emails\": [\"string\"],\n  \"mustHaveSkills\": [\"string\"],\n  \"jobTone\": \"professional\",\n  \"confidence\": 0.9\n}}\n\nImportant: Identify the job position/title accurately even if formatted as 'We Are <TITLE>', 'Hiring <TITLE>', or in headlines.\n\nJOB LISTING:\n{description}");
+    let prompt = format!("You are an accurate structured job parser. Extract facts from the job text below.\nReturn strict JSON matching this schema:\n{{\n  \"company\": \"string\",\n  \"position\": \"string (job title/role)\",\n  \"location\": \"string\",\n  \"emails\": [\"string\"],\n  \"mustHaveSkills\": [\"string\"],\n  \"jobTone\": \"professional\",\n  \"confidence\": 0.9\n}}\n\nImportant:\n1. Extract ALL email addresses found in the text for HR/recruitment into the 'emails' array (if multiple emails exist, include all of them).\n2. Identify the job position/title accurately even if formatted as 'We Are <TITLE>', 'Hiring <TITLE>', or in headlines.\n\nJOB LISTING:\n{description}");
     
     let output = match call_ai(
         &endpoint,
@@ -526,9 +537,13 @@ async fn review_job(
             if ai_review.company.trim().is_empty() || ai_review.company == "Not found" {
                 ai_review.company = local.company;
             }
-            if ai_review.emails.is_empty() {
-                ai_review.emails = local.emails;
+            let mut combined_emails = ai_review.emails;
+            for e in local.emails {
+                if !combined_emails.iter().any(|existing| existing.eq_ignore_ascii_case(&e)) {
+                    combined_emails.push(e);
+                }
             }
+            ai_review.emails = combined_emails;
             if ai_review.must_have_skills.is_empty() {
                 ai_review.must_have_skills = local.must_have_skills;
             }
@@ -1046,11 +1061,23 @@ fn send_application_email(payload: SendPayload) -> Result<String, String> {
                 .header(ContentType::TEXT_HTML)
                 .body(html),
         );
-    let body = if let Some(path) = payload.resume_path.filter(|value| !value.is_empty()) {
-        let bytes = fs::read(&path).map_err(|error| format!("Unable to read resume: {error}"))?;
-        let mut file_name = payload.resume_name.unwrap_or_default().trim().to_string();
+    let mut mixed = MultiPart::mixed().multipart(alternative);
+    let mut all_attachments = payload.attachments.clone();
+    if all_attachments.is_empty() {
+        if let Some(path) = payload.resume_path.filter(|value| !value.trim().is_empty()) {
+            all_attachments.push(ResumeAttachment {
+                path,
+                name: payload.resume_name,
+            });
+        }
+    }
+
+    for att in all_attachments {
+        if att.path.trim().is_empty() { continue; }
+        let bytes = fs::read(&att.path).map_err(|error| format!("Unable to read resume '{}': {error}", att.path))?;
+        let mut file_name = att.name.unwrap_or_default().trim().to_string();
         if file_name.is_empty() {
-            file_name = Path::new(&path)
+            file_name = Path::new(&att.path)
                 .file_name()
                 .and_then(|value| value.to_str())
                 .unwrap_or("resume.pdf")
@@ -1059,15 +1086,12 @@ fn send_application_email(payload: SendPayload) -> Result<String, String> {
         if !file_name.to_lowercase().ends_with(".pdf") {
             file_name.push_str(".pdf");
         }
-        MultiPart::mixed()
-            .multipart(alternative)
-            .singlepart(Attachment::new(file_name).body(
-                bytes,
-                ContentType::parse("application/pdf").map_err(|error| error.to_string())?,
-            ))
-    } else {
-        MultiPart::mixed().multipart(alternative)
-    };
+        mixed = mixed.singlepart(Attachment::new(file_name).body(
+            bytes,
+            ContentType::parse("application/pdf").map_err(|error| error.to_string())?,
+        ));
+    }
+
     let mut message_builder = Message::builder()
         .from(from)
         .subject(payload.subject)
@@ -1077,7 +1101,7 @@ fn send_application_email(payload: SendPayload) -> Result<String, String> {
         message_builder = message_builder.to(recipient);
     }
     let message = message_builder
-        .multipart(body)
+        .multipart(mixed)
         .map_err(|error| error.to_string())?;
     let credentials = Credentials::new(smtp.username.clone(), smtp.password.clone());
     let mailer = if smtp.use_tls {

@@ -232,9 +232,11 @@ export interface Application {
   position: string
   location: string
   email: string
+  emails?: string[]
   subject: string
   status: ApplicationStatus
   resumeId?: string
+  resumeIds?: string[]
   createdAt: string
   updatedAt: string
   notes: string
