@@ -10,9 +10,9 @@ echo.
 set /p MSG="Enter commit/release message (or press Enter for default): "
 
 if "%MSG%"=="" (
-    powershell -ExecutionPolicy Bypass -File "%~dp0scripts\release.ps1"
+    node "%~dp0scripts\release.js"
 ) else (
-    powershell -ExecutionPolicy Bypass -File "%~dp0scripts\release.ps1" -CommitMessage "%MSG%"
+    node "%~dp0scripts\release.js" "%MSG%"
 )
 
 if %ERRORLEVEL% NEQ 0 (
