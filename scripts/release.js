@@ -33,7 +33,7 @@ if (parts.length === 3 && !parts.some(isNaN)) {
 } else {
   parts[0] = 0
   parts[1] = 1
-  parts[2] = 2
+  parts[2] = 4
 }
 
 const nextVersion = parts.join('.')
@@ -82,7 +82,7 @@ try {
   process.exit(1)
 }
 
-// 5. Gather all release assets into a clean folder
+// 5. Gather current version release assets into a clean folder
 const distFolder = path.join(rootDir, 'dist_release', `v${nextVersion}`)
 if (fs.existsSync(distFolder)) {
   fs.rmSync(distFolder, { recursive: true, force: true })
@@ -101,18 +101,21 @@ function copyAssets(dir) {
       copyAssets(fullPath)
     } else {
       const lower = entry.name.toLowerCase()
-      if (
-        lower.endsWith('.exe') ||
-        lower.endsWith('.msi') ||
-        lower.endsWith('.json') ||
-        lower.endsWith('.zip') ||
-        lower.endsWith('.sig') ||
-        lower.endsWith('.tar.gz')
-      ) {
-        const destPath = path.join(distFolder, entry.name)
-        fs.copyFileSync(fullPath, destPath)
-        collectedFiles.push(entry.name)
-        console.log(`  + Packaged: ${entry.name}`)
+      // Only package files belonging to this specific version
+      if (entry.name.includes(`_${nextVersion}_`) || entry.name.includes(`-${nextVersion}-`)) {
+        if (
+          lower.endsWith('.exe') ||
+          lower.endsWith('.msi') ||
+          lower.endsWith('.json') ||
+          lower.endsWith('.zip') ||
+          lower.endsWith('.sig') ||
+          lower.endsWith('.tar.gz')
+        ) {
+          const destPath = path.join(distFolder, entry.name)
+          fs.copyFileSync(fullPath, destPath)
+          collectedFiles.push(entry.name)
+          console.log(`  + Packaged: ${entry.name}`)
+        }
       }
     }
   }
@@ -121,28 +124,26 @@ function copyAssets(dir) {
 console.log(`\n==> Collecting all release assets into: ${distFolder}`)
 copyAssets(bundleDir)
 
-// 6. Guarantee latest.json exists for in-app updater
+// 6. Guarantee latest.json exists and points to the signed release
 const latestJsonPath = path.join(distFolder, 'latest.json')
-if (!fs.existsSync(latestJsonPath)) {
-  const sigFile = collectedFiles.find((f) => f.endsWith('.sig') && !f.endsWith('.msi.sig')) || collectedFiles.find((f) => f.endsWith('.sig'))
-  const zipFile = collectedFiles.find((f) => f.endsWith('.zip') && !f.endsWith('.msi.zip')) || collectedFiles.find((f) => f.endsWith('.zip'))
+const exeSig = collectedFiles.find((f) => f.toLowerCase().endsWith('-setup.exe.sig')) || collectedFiles.find((f) => f.endsWith('.sig'))
+const exeFile = collectedFiles.find((f) => f.toLowerCase().endsWith('-setup.exe')) || collectedFiles.find((f) => f.endsWith('.exe'))
 
-  if (sigFile && zipFile) {
-    const signature = fs.readFileSync(path.join(distFolder, sigFile), 'utf8').trim()
-    const latestPayload = {
-      version: `v${nextVersion}`,
-      notes: `AgentJob Release v${nextVersion}`,
-      pub_date: new Date().toISOString(),
-      platforms: {
-        'windows-x86_64': {
-          signature,
-          url: `https://github.com/byronjreyes/Agent-Job/releases/download/v${nextVersion}/${zipFile}`,
-        },
+if (exeSig && exeFile) {
+  const signature = fs.readFileSync(path.join(distFolder, exeSig), 'utf8').trim()
+  const latestPayload = {
+    version: `v${nextVersion}`,
+    notes: `AgentJob Release v${nextVersion}`,
+    pub_date: new Date().toISOString(),
+    platforms: {
+      'windows-x86_64': {
+        signature,
+        url: `https://github.com/byronjreyes/Agent-Job/releases/download/v${nextVersion}/${exeFile}`,
       },
-    }
-    fs.writeFileSync(latestJsonPath, JSON.stringify(latestPayload, null, 2) + '\n', 'utf8')
-    console.log(`  + Generated updater manifest: latest.json`)
+    },
   }
+  fs.writeFileSync(latestJsonPath, JSON.stringify(latestPayload, null, 2) + '\n', 'utf8')
+  console.log(`  + Generated updater manifest: latest.json`)
 }
 
 console.log('\n==================================================')
@@ -154,7 +155,7 @@ console.log(`Folder: ${distFolder}\n`)
 if (process.platform === 'win32') {
   try {
     const releaseUrl = `https://github.com/byronjreyes/Agent-Job/releases/new?tag=v${nextVersion}&title=AgentJob%20v${nextVersion}`
-    execSync(`powershell -NoProfile -Command "Start-Process explorer.exe '${distFolder}'"`, { stdio: 'ignore' })
+    execSync(`powershell -NoProfile -Command "Start-Process explorer.exe -ArgumentList '${distFolder}'"`, { stdio: 'ignore' })
     execSync(`powershell -NoProfile -Command "Start-Process '${releaseUrl}'"`, { stdio: 'ignore' })
   } catch (err) {
     console.log('Could not launch Explorer or Browser automatically:', err.message)
