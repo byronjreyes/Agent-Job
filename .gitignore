@@ -29,5 +29,6 @@ target
 *.key
 src-tauri/*.key
 .env*
-!.env.example
+# Releases
+dist_release
 

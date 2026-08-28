@@ -16,6 +16,7 @@ if (!fs.existsSync(keyPath)) {
   console.error(`\n[ERROR] Private signing key not found at: ${keyPath}`)
   process.exit(1)
 }
+const privateKeyContent = fs.readFileSync(keyPath, 'utf8').trim()
 
 // 2. Bump version in package.json and tauri.conf.json
 const packageJsonPath = path.join(rootDir, 'package.json')
@@ -32,7 +33,7 @@ if (parts.length === 3 && !parts.some(isNaN)) {
 } else {
   parts[0] = 0
   parts[1] = 1
-  parts[2] = 1
+  parts[2] = 2
 }
 
 const nextVersion = parts.join('.')
@@ -41,9 +42,8 @@ console.log(`\n==> Incrementing version: v${currentVersion} -> v${nextVersion}`)
 pkg.version = nextVersion
 tauriConf.version = nextVersion
 
-// Ensure createUpdaterArtifacts is configured
 if (!tauriConf.bundle) tauriConf.bundle = {}
-tauriConf.bundle.createUpdaterArtifacts = 'v1Compatible'
+tauriConf.bundle.createUpdaterArtifacts = true
 
 fs.writeFileSync(packageJsonPath, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
 fs.writeFileSync(tauriConfPath, JSON.stringify(tauriConf, null, 2) + '\n', 'utf8')
@@ -68,7 +68,10 @@ try {
 console.log(`\n==> Compiling and cryptographically signing release binaries...`)
 const buildEnv = {
   ...process.env,
+  TAURI_SIGNING_PRIVATE_KEY: privateKeyContent,
   TAURI_SIGNING_PRIVATE_KEY_PATH: keyPath,
+  TAURI_KEY_PASSWORD: '',
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: '',
 }
 
 try {
@@ -118,7 +121,7 @@ function copyAssets(dir) {
 console.log(`\n==> Collecting all release assets into: ${distFolder}`)
 copyAssets(bundleDir)
 
-// 6. Guarantee latest.json exists for the in-app updater
+// 6. Guarantee latest.json exists for in-app updater
 const latestJsonPath = path.join(distFolder, 'latest.json')
 if (!fs.existsSync(latestJsonPath)) {
   const sigFile = collectedFiles.find((f) => f.endsWith('.sig') && !f.endsWith('.msi.sig')) || collectedFiles.find((f) => f.endsWith('.sig'))
@@ -138,7 +141,7 @@ if (!fs.existsSync(latestJsonPath)) {
       },
     }
     fs.writeFileSync(latestJsonPath, JSON.stringify(latestPayload, null, 2) + '\n', 'utf8')
-    console.log(`  + Generated manifest: latest.json`)
+    console.log(`  + Generated updater manifest: latest.json`)
   }
 }
 
@@ -151,7 +154,7 @@ console.log(`Folder: ${distFolder}\n`)
 if (process.platform === 'win32') {
   try {
     const releaseUrl = `https://github.com/byronjreyes/Agent-Job/releases/new?tag=v${nextVersion}&title=AgentJob%20v${nextVersion}`
-    execSync(`powershell -NoProfile -Command "Start-Process '${distFolder}'"`, { stdio: 'ignore' })
+    execSync(`powershell -NoProfile -Command "Start-Process explorer.exe '${distFolder}'"`, { stdio: 'ignore' })
     execSync(`powershell -NoProfile -Command "Start-Process '${releaseUrl}'"`, { stdio: 'ignore' })
   } catch (err) {
     console.log('Could not launch Explorer or Browser automatically:', err.message)
