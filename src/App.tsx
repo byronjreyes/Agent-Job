@@ -1154,84 +1154,103 @@ function SettingsView() {
       )}
 
       {tab === 'appearance' && (
-        <section className="card space-y-4">
-          <SectionTitle title="Theme preset" description="Choose the contrast that feels best for your workspace." />
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <button className={`theme-choice-btn ${store.theme === 'light' ? 'active' : ''}`} onClick={() => store.setTheme('light')}>
-              <Sun size={24} className="text-amber-400" />
-              <b className="mt-2 text-sm">Light</b>
-              <span className="text-xs text-muted">Bright surfaces & high readability</span>
-            </button>
-            <button className={`theme-choice-btn ${store.theme === 'dark' ? 'active' : ''}`} onClick={() => store.setTheme('dark')}>
-              <Moon size={24} className="text-indigo-400" />
-              <b className="mt-2 text-sm">Dark</b>
-              <span className="text-xs text-muted">Reduced glare for low-light environments</span>
+        <section className="card flex flex-1 min-h-[440px] flex-col justify-between p-6 sm:p-8 space-y-6">
+          <div className="space-y-6">
+            <div>
+              <SectionTitle title="Theme preset" description="Choose the contrast that feels best for your workspace." />
+              <div className="grid gap-3.5 sm:grid-cols-2">
+                <button className={`theme-choice-btn ${store.theme === 'light' ? 'active' : ''}`} onClick={() => store.setTheme('light')}>
+                  <Sun size={24} className="text-amber-400" />
+                  <b className="mt-2 text-sm">Light</b>
+                  <span className="text-xs text-muted">Bright surfaces & high readability</span>
+                </button>
+                <button className={`theme-choice-btn ${store.theme === 'dark' ? 'active' : ''}`} onClick={() => store.setTheme('dark')}>
+                  <Moon size={24} className="text-indigo-400" />
+                  <b className="mt-2 text-sm">Dark</b>
+                  <span className="text-xs text-muted">Reduced glare for low-light environments</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="type-preview">
+              <span>Live theme preview</span>
+              <h3>Focus on what matters with high-contrast surfaces designed for comfort.</h3>
+              <p>Panels, borders, cards, and typography smoothly adapt to protect your eyes across long application sessions.</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-line text-xs text-muted">
+            <span>Current theme: <b className="text-text capitalize">{store.theme} mode</b></span>
+            <button className="settings-reset cursor-pointer text-xs" onClick={() => store.setTheme('dark')}>
+              Reset to dark theme
             </button>
           </div>
         </section>
       )}
 
       {tab === 'accessibility' && (
-        <section className="card space-y-6">
-          <div>
-            <SectionTitle title="Font style" description="Poppins, Montserrat, and Plus Jakarta Sans are bundled for offline use. Gotham uses your licensed local installation." />
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {fontChoices.map((font) => (
-                <button
-                  data-preview-font={font.id}
-                  className={`font-choice-card ${store.accessibility.fontFamily === font.id ? 'active' : ''}`}
-                  key={font.id}
-                  onClick={() => store.updateAccessibility({ fontFamily: font.id })}
-                >
-                  <span className="font-sample">{font.sample}</span>
-                  <div className="font-choice-copy">
-                    <b>{font.name}</b>
-                    <small>{font.description}</small>
-                  </div>
-                  {store.accessibility.fontFamily === font.id && <Check size={16} className="text-emerald-400 shrink-0" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-6 lg:grid-cols-2">
+        <section className="card flex flex-1 min-h-[440px] flex-col justify-between p-6 sm:p-8 space-y-6">
+          <div className="space-y-6">
             <div>
-              <SectionTitle title="Interface scale" description="Resize controls, spacing, and navigation together." />
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {uiScales.map((option) => (
+              <SectionTitle title="Font style" description="Poppins, Montserrat, and Plus Jakarta Sans are bundled for offline use. Gotham uses your licensed local installation." />
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {fontChoices.map((font) => (
                   <button
-                    className={`scale-choice-btn ${store.accessibility.uiScale === option.value ? 'active' : ''}`}
-                    key={option.value}
-                    onClick={() => store.updateAccessibility({ uiScale: option.value })}
+                    data-preview-font={font.id}
+                    className={`font-choice-card ${store.accessibility.fontFamily === font.id ? 'active' : ''}`}
+                    key={font.id}
+                    onClick={() => store.updateAccessibility({ fontFamily: font.id })}
                   >
-                    <b>{option.label}</b>
-                    <span>{option.detail}</span>
+                    <span className="font-sample">{font.sample}</span>
+                    <div className="font-choice-copy">
+                      <b>{font.name}</b>
+                      <small>{font.description}</small>
+                    </div>
+                    {store.accessibility.fontFamily === font.id && <Check size={16} className="text-emerald-400 shrink-0" />}
                   </button>
                 ))}
               </div>
             </div>
 
-            <div>
-              <SectionTitle title="Text size" description="Adjust text independently for easier reading." />
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                {textScales.map((option) => (
-                  <button
-                    className={`scale-choice-btn ${store.accessibility.textScale === option.value ? 'active' : ''}`}
-                    key={option.value}
-                    onClick={() => store.updateAccessibility({ textScale: option.value })}
-                  >
-                    <b>{option.label}</b>
-                    <span>{option.detail}</span>
-                  </button>
-                ))}
+            <div className="grid gap-6 lg:grid-cols-2">
+              <div>
+                <SectionTitle title="Interface scale" description="Resize controls, spacing, and navigation together." />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {uiScales.map((option) => (
+                    <button
+                      className={`scale-choice-btn ${store.accessibility.uiScale === option.value ? 'active' : ''}`}
+                      key={option.value}
+                      onClick={() => store.updateAccessibility({ uiScale: option.value })}
+                    >
+                      <b>{option.label}</b>
+                      <span>{option.detail}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <SectionTitle title="Text size" description="Adjust text independently for easier reading." />
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {textScales.map((option) => (
+                    <button
+                      className={`scale-choice-btn ${store.accessibility.textScale === option.value ? 'active' : ''}`}
+                      key={option.value}
+                      onClick={() => store.updateAccessibility({ textScale: option.value })}
+                    >
+                      <b>{option.label}</b>
+                      <span>{option.detail}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="type-preview">
-            <span>Live typography preview</span>
-            <h3>Find the right role without straining your eyes.</h3>
-            <p>Review job descriptions, prepare tailored applications, and manage your progress with text that feels comfortable to read.</p>
+            <div className="type-preview">
+              <span>Live typography preview</span>
+              <h3>Find the right role without straining your eyes.</h3>
+              <p>Review job descriptions, prepare tailored applications, and manage your progress with text that feels comfortable to read.</p>
+            </div>
           </div>
 
           <div className="flex justify-end pt-2 border-t border-line">
