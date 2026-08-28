@@ -1036,32 +1036,46 @@ function SettingsView() {
       />
 
       {tab === 'updates' && (
-        <div className="space-y-4">
-          <section className="card space-y-4">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <SectionTitle title="Software updates" description="Check for new releases, install updates automatically, or configure GitHub release channels." />
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="tag bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-mono font-bold">
-                    v0.1.0
-                  </span>
-                  <span className="tag bg-inset text-muted font-mono">
-                    Channel: GitHub Releases
-                  </span>
-                </div>
-              </div>
+        <section className="card flex min-h-[520px] flex-col items-center justify-center p-8 text-center sm:p-12">
+          <div className="mx-auto flex max-w-md flex-col items-center">
+            <div className="grid h-16 w-16 place-items-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 shadow-lg shadow-emerald-500/5">
+              <RefreshCw size={28} className={checkingUpdate ? 'animate-spin' : ''} />
+            </div>
+
+            <h3 className="mt-5 text-lg font-bold tracking-tight">Software updates</h3>
+            <p className="mt-1.5 text-xs text-muted leading-relaxed">
+              Check for new releases, install updates automatically, or stay up to date with official GitHub releases.
+            </p>
+
+            <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
+              <span className="tag bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-mono font-bold">
+                v0.1.0
+              </span>
+              <span className="tag bg-inset text-muted font-mono">
+                Channel: GitHub Releases
+              </span>
+            </div>
+
+            <div className="mt-6 flex flex-col items-center gap-3 w-full">
               <button
-                className="primary-button cursor-pointer"
+                className="primary-button h-10 px-6 text-xs font-bold cursor-pointer shadow-md"
                 disabled={checkingUpdate || downloadProgress !== null}
                 onClick={() => void handleCheckUpdate()}
               >
-                <RefreshCw size={14} className={checkingUpdate ? 'animate-spin' : ''} />
+                <RefreshCw size={15} className={checkingUpdate ? 'animate-spin' : ''} />
                 {checkingUpdate ? 'Checking GitHub…' : 'Check for updates'}
               </button>
+
+              {updateInfo && !updateInfo.available && !checkingUpdate && (
+                <div className="mt-3 flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-semibold text-emerald-400">
+                  <ShieldCheck size={16} />
+                  <span>You are on the latest version of AgentJob (v{updateInfo.currentVersion})</span>
+                </div>
+              )}
             </div>
 
             {updateInfo?.available && (
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
+              <div className="mt-6 w-full text-left rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-bold text-emerald-400">
                     <Sparkles size={16} />
@@ -1111,18 +1125,8 @@ function SettingsView() {
               </div>
             )}
 
-            {updateInfo && !updateInfo.available && !checkingUpdate && (
-              <div className="flex items-center gap-3 rounded-lg border border-line bg-inset p-3 text-xs">
-                <ShieldCheck size={18} className="text-emerald-400 shrink-0" />
-                <div>
-                  <b className="text-text">You are on the latest version</b>
-                  <p className="mt-0.5 text-muted text-[11px]">AgentJob v{updateInfo.currentVersion} is up to date.</p>
-                </div>
-              </div>
-            )}
-
             {updateError && (
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs">
+              <div className="mt-4 flex w-full items-start justify-between gap-3 text-left rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs">
                 <div className="flex items-start gap-2.5">
                   <AlertCircle size={16} className="text-rose-400 shrink-0 mt-0.5" />
                   <div>
@@ -1139,8 +1143,8 @@ function SettingsView() {
                 </button>
               </div>
             )}
-          </section>
-        </div>
+          </div>
+        </section>
       )}
 
       {tab === 'appearance' && (
