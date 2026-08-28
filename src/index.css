@@ -11,6 +11,7 @@
 ::-webkit-scrollbar-thumb { background:color-mix(in srgb,var(--line) 80%,var(--muted)); border-radius:999px; }
 ::-webkit-scrollbar-thumb:hover { background:var(--muted); }
 html,body,#root { height:100%; overflow:hidden; }
+[hidden], .hidden { display: none !important; }
 body { margin:0; color:var(--text); background:var(--app); font-size:calc(13px * var(--text-scale)); }
 .text-xs { font-size:calc(.75rem * var(--text-scale)); }.text-sm { font-size:calc(.875rem * var(--text-scale)); }.text-base { font-size:calc(1rem * var(--text-scale)); }.text-xl { font-size:calc(1.25rem * var(--text-scale)); }.text-\[9px\] { font-size:calc(9px * var(--text-scale)); }.text-\[10px\] { font-size:calc(10px * var(--text-scale)); }.text-\[11px\] { font-size:calc(11px * var(--text-scale)); }
 button,input,textarea,select { font:inherit; }

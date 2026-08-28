@@ -108,17 +108,23 @@ function App() {
             </div>
             {searchPlaceholder[view] ? <div className="relative hidden w-full max-w-sm md:block"><input className="input h-8 pr-8" value={search} onChange={(event) => setSearchByView((values) => ({ ...values, [view]: event.target.value }))} placeholder={searchPlaceholder[view]} /><Search size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted" /></div> : <div className="flex-1" />}
           </header>
-          <div className={`unified-scroll workspace-scroll ${view === 'workspace' ? '' : 'hidden'}`} aria-hidden={view !== 'workspace'}>
+          <div
+            className="unified-scroll workspace-scroll"
+            style={{ display: view === 'workspace' ? 'flex' : 'none' }}
+            aria-hidden={view !== 'workspace'}
+          >
             <WorkspaceView onNavigate={setView} />
           </div>
-          {view !== 'workspace' && <div className="unified-scroll">
-            {view === 'resumes' && <ResumesView filter={search} />}
-            {view === 'templates' && <TemplatesView filter={search} />}
-            {view === 'endpoints' && <EndpointsView filter={search} />}
-            {view === 'profile' && <ProfileView />}
-            {view === 'tracker' && <TrackerView filter={search} />}
-            {view === 'settings' && <SettingsView />}
-          </div>}
+          {view !== 'workspace' && (
+            <div className="unified-scroll">
+              {view === 'resumes' && <ResumesView filter={search} />}
+              {view === 'templates' && <TemplatesView filter={search} />}
+              {view === 'endpoints' && <EndpointsView filter={search} />}
+              {view === 'profile' && <ProfileView />}
+              {view === 'tracker' && <TrackerView filter={search} />}
+              {view === 'settings' && <SettingsView />}
+            </div>
+          )}
         </main>
       </div>
       {!store.onboardingComplete && <OnboardingModal />}
