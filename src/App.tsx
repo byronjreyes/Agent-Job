@@ -1456,7 +1456,7 @@ function SettingsView() {
                 </div>
                 <button
                   className="icon-button"
-                  onClick={() => void openBrowser('https://github.com/byronreyes/agentjob/releases')}
+                  onClick={() => void openBrowser('https://github.com/byronjreyes/Agent-Job/releases')}
                   title="Open GitHub Releases in browser"
                 >
                   <ExternalLink size={13} />

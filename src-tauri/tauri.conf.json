@@ -41,7 +41,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhCRTQ4RjgyMzYzOTg0RUMKUldUc2hEazJnby9raXl5VjluaGlTY1FRbHIyTzFDTkkxSXJISDU3L29pWUoyYzBqQVlkWUthZEoK",
       "endpoints": [
-        "https://github.com/byronreyes/agentjob/releases/latest/download/latest.json"
+        "https://github.com/byronjreyes/Agent-Job/releases/latest/download/latest.json"
       ]
     }
   }
