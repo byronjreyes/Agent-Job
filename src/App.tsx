@@ -1016,7 +1016,7 @@ function SettingsView() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-1 flex-col space-y-4">
       <PageIntro
         title="Settings"
         description="Personalize AgentJob for your screen, reading comfort, and manage software updates."
@@ -1036,7 +1036,7 @@ function SettingsView() {
       />
 
       {tab === 'updates' && (
-        <section className="card flex min-h-[520px] flex-col items-center justify-center p-8 text-center sm:p-12">
+        <section className="card flex flex-1 min-h-[440px] flex-col items-center justify-center p-8 text-center sm:p-12">
           <div className="mx-auto flex max-w-md flex-col items-center">
             <div className="grid h-16 w-16 place-items-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 shadow-lg shadow-emerald-500/5">
               <RefreshCw size={28} className={checkingUpdate ? 'animate-spin' : ''} />
