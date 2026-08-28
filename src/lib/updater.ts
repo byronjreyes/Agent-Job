@@ -1,4 +1,5 @@
 import { check, type Update } from '@tauri-apps/plugin-updater'
+import { getVersion } from '@tauri-apps/api/app'
 import { isTauri } from './bridge'
 
 export interface UpdateInfo {
@@ -13,8 +14,17 @@ export type UpdateProgressCallback = (downloaded: number, total: number | null) 
 
 let pendingUpdate: Update | null = null
 
+export async function getAppVersion(): Promise<string> {
+  if (!isTauri()) return '0.1.4'
+  try {
+    return await getVersion()
+  } catch {
+    return '0.1.4'
+  }
+}
+
 export async function checkForAppUpdate(): Promise<UpdateInfo> {
-  const currentVersion = '0.1.0'
+  const currentVersion = await getAppVersion()
   if (!isTauri()) {
     return {
       available: false,

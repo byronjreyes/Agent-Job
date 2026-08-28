@@ -16,7 +16,7 @@ import '@fontsource-variable/plus-jakarta-sans'
 import { useAppStore } from './store'
 import { toast, useToastStore } from './lib/toast'
 import { discoverModels, exportTracker, generateLetter, importResume, isJobPosting, isTauri, ocrImage, openBrowser, reviewJob, sendEmail, testEndpoint } from './lib/bridge'
-import { checkForAppUpdate, downloadAndInstallUpdate, type UpdateInfo } from './lib/updater'
+import { checkForAppUpdate, downloadAndInstallUpdate, getAppVersion, type UpdateInfo } from './lib/updater'
 import type { AiEndpoint, Application, ApplicationStatus, CoverTemplate, FontFamily, JobReview, Profile, ProviderKind, SignatureConfig, ViewId } from './types'
 import { DEFAULT_SIGNATURE_HTML, builtInTemplates, emptyProfile } from './types'
 import './index.css'
@@ -1274,11 +1274,16 @@ const fontChoices: Array<{ id: FontFamily; name: string; sample: string; descrip
 function SettingsView() {
   const store = useAppStore()
   const [tab, setTab] = useState<'appearance' | 'accessibility' | 'updates'>('updates')
+  const [appVersion, setAppVersion] = useState('0.1.4')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null)
   const [updateError, setUpdateError] = useState<string | null>(null)
   const [downloadProgress, setDownloadProgress] = useState<{ downloaded: number; total: number | null } | null>(null)
   const [updateReady, setUpdateReady] = useState(false)
+
+  useEffect(() => {
+    void getAppVersion().then(setAppVersion)
+  }, [])
 
   const uiScales = [
     { value: 0.9, label: 'Compact', detail: '90%' },
@@ -1369,7 +1374,7 @@ function SettingsView() {
 
             <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2">
               <span className="tag bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-mono font-bold">
-                v0.1.0
+                v{appVersion}
               </span>
               <span className="tag bg-inset text-muted font-mono">
                 Channel: GitHub Releases

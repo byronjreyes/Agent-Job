@@ -132,7 +132,7 @@ const exeFile = collectedFiles.find((f) => f.toLowerCase().endsWith('-setup.exe'
 if (exeSig && exeFile) {
   const signature = fs.readFileSync(path.join(distFolder, exeSig), 'utf8').trim()
   const latestPayload = {
-    version: `v${nextVersion}`,
+    version: nextVersion,
     notes: `AgentJob Release v${nextVersion}`,
     pub_date: new Date().toISOString(),
     platforms: {
